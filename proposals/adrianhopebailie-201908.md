@@ -1,6 +1,6 @@
 ---
 Change Request ID: ???
-Change Request Name: Template for Change Request
+Change Request Name: Update API for ILPv4 and Cross-Currency
 Prepared By: Adrian Hope-Bailie (Coil)
 Solution Proposal Status: In review
 Approved/Rejected Date: N/A
