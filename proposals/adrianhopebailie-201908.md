@@ -1,5 +1,5 @@
 ---
-Change Request ID: ???
+Change Request ID: 18
 Change Request Name: Update API for ILPv4 and Cross-Currency
 Prepared By: Adrian Hope-Bailie (Coil)
 Solution Proposal Status: In review
@@ -17,6 +17,7 @@ Approved/Rejected Date: N/A
     - [Cross-Currency and Cross-Border Support](#cross-currency-and-cross-border-support)
       - [A Note on Payee Privacy](#a-note-on-payee-privacy)
     - [Regulatory Data Exchange](#regulatory-data-exchange)
+    - [Connecting to non-Mojaloop systems](#connecting-to-non-mojaloop-systems)
   - [Proposed Solution](#proposed-solution)
     - [Upgrading to Interledger Protocol version 4](#upgrading-to-interledger-protocol-version-4-1)
     - [Generation of the Condition and Fulfillment](#generation-of-the-condition-and-fulfillment-1)
@@ -26,17 +27,21 @@ Approved/Rejected Date: N/A
       - [Add `AccountList` and `Account` data types](#add-accountlist-and-account-data-types)
       - [Specify accountAddress in the Quote and Transfer to assist with routing](#specify-accountaddress-in-the-quote-and-transfer-to-assist-with-routing)
     - [Regulatory Data Exchange](#regulatory-data-exchange-1)
-      - [`Participant` data model](#participant-data-model)
-      - [`JsonWebKey` data type](#jsonwebkey-data-type)
+      - [Add `ParticipantList`, `Participant` and `Rate` data model](#add-participantlist-participant-and-rate-data-model)
+      - [`RateValue` data type:](#ratevalue-data-type)
+        - [`RateValue` Regular Expression](#ratevalue-regular-expression)
+      - [Add `RequiredDataList`, `ProvidedDataList` and `ProvidedData`](#add-requireddatalist-provideddatalist-and-provideddata)
       - [Fees and Rates](#fees-and-rates)
       - [Regulatory Data](#regulatory-data)
+    - [Connecting to non-Mojaloop systems](#connecting-to-non-mojaloop-systems-1)
   - [Data Model Changes](#data-model-changes)
 
 ## Document History
 
-| Version | Date       | Author             | Change Description |
-| ------- | ---------- | ------------------ | ------------------ |
-| 1.0     | 2019-08-29 | Adrian Hope-Bailie | Initial draft      |
+| Version | Date       | Author             | Change Description         |
+| ------- | ---------- | ------------------ | -------------------------- |
+| 1.0     | 2019-08-29 | Adrian Hope-Bailie | Initial draft              |
+| 1.1     | 2019-11-12 | Adrian Hope-Bailie | Updates following workshop |
 
 ## Change Request Background
 
@@ -181,6 +186,16 @@ It provides a mechanism for participants in the transaction to both request and
 provide such data securely and also for the route of the quoting cycle messages
 to be recorded so it can be used to route the subsequent transfer.
 
+### Connecting to non-Mojaloop systems
+
+It is possible (and likely) that there will be a need to initiate and terminate
+transactions in a Mojaloop system when the counter-party is not in a Mojaloop
+system (or even a system that supports real-time clearing).
+
+In this case it is important for the CNP that is bridging the Mojaloop system to
+the other system(s) to be able to express and expected clearing time for
+transactions.
+
 ## Proposed Solution
 
 ### Upgrading to Interledger Protocol version 4
@@ -199,7 +214,7 @@ Since ILPv4 does not use quoting, the destination address of a message is
 provided in the transfer. This is different to the Open FSP API which requires a
 quote cycle preceding a transaction.
 
-When using the API routing of a multi-hop transaction is determine during the
+When using the API routing of a multi-hop transaction is determined during the
 quote cycle and the path of the transaction that follows must be the same as the
 path determined during quoting.
 
@@ -429,24 +444,64 @@ The data element is optional for single hop transactions (that consist of only
 one transfer) but required for transactions that consist of two or more
 transfers.
 
-#### `Participant` data model
+#### Add `ParticipantList`, `Participant` and `Rate` data model
 
-| Name             | Cardinality | Type             | Description                                                                                                 |
-| ---------------- | ----------- | ---------------- | ----------------------------------------------------------------------------------------------------------- |
-| fspId            | 1           | `FspId`          | The identity of the participant                                                                             |
-| transferCurrency | 1           | `Currency`       | The currency of the transfer that will be made by this participant.                                         |
-| fee              | 1           | `Money`          | The fee that will be charged by the participant.                                                            |
-| rate             | 0..1        | `Amount`         | The rate of exchange that will applied by this participant.                                                 |
-| expiration       | 1           | `DateTime`       | Date and time until when the quotation is valid and can be honored when used in the subsequent transaction. |
-| dataRequired     | 0..32       | `String(1..128)` | List of required                                                                                            |
-| encryptionKey    | 0..1        | `JsonWebKey`     | The Public Key of the participant used to encrypt data sent to the participant.                             |
-| dataProvided     | 0..32       | `EncryptedData`  | The data provided by other participants for use by this participant.                                        |
+`ParticipantList`:
 
-#### `JsonWebKey` data type
+| Data Element | Cardinality | Type          | Description                    |
+| ------------ | ----------- | ------------- | ------------------------------ |
+| participant  | 1..16       | `Participant` | Number of Participant elements |
 
-The `JsonWebKey` data type is a UTF-8 string that can be deserialized per
-[RFC7517](https://tools.ietf.org/html/rfc7517) to resolve the details of a
-cryptographic key.
+`Participant`:
+
+| Name             | Cardinality | Type               | Description                                                                                                 |
+| ---------------- | ----------- | ------------------ | ----------------------------------------------------------------------------------------------------------- |
+| fspId            | 1           | `FspId`            | The identity of the participant                                                                             |
+| transferCurrency | 1           | `Currency`         | The currency of the transfer that will be made by this participant.                                         |
+| fee              | 1           | `Money`            | The fee that will be charged by the participant.                                                            |
+| rate             | 0..1        | `Rate`             | The rate of exchange that will applied by this participant.                                                 |
+| expiration       | 1           | `DateTime`         | Date and time until when the quotation is valid and can be honored when used in the subsequent transaction. |
+| requiredData     | 0..1        | `RequiredDataList` | List of data required for compliance                                                                        |
+| providedData     | 0..32       | `ProvidedDataList` | The data provided by other participants for use by this participant.                                        |
+
+`Rate`:
+
+| Data Element | Cardinality | Type        | Description                                      |
+| ------------ | ----------- | ----------- | ------------------------------------------------ |
+| rate         | 1           | `RateValue` | Rate of exchange                                 |
+| fromCurrency | 1           | `Currency`  | Currency from which the conversion is being made |
+| toCurrency   | 1           | `Currency`  | Currency to which the conversion is being madre  |
+
+#### `RateValue` data type:
+
+The API data type `RateValue` is a JSON String consisting of digits only and an
+optional period. Negative numbers and leading zeroes are not allowed.
+
+##### `RateValue` Regular Expression
+
+The regular expression for restricting an Rate is
+`^(([1-9][0-9]{0,5}))([.][0-9]{0,8}[1-9])?$`
+
+#### Add `RequiredDataList`, `ProvidedDataList` and `ProvidedData`
+
+The `RequiredDataList` data model is defined as:
+
+| Data Element | Cardinality | Type             | Description                                                                    |
+| ------------ | ----------- | ---------------- | ------------------------------------------------------------------------------ |
+| requiredData | 1..256      | `String(1..128)` | Names of data elements required by the participant to complete the transaction |
+
+The `ProvidedDataList` data model is defined as:
+
+| Data Element | Cardinality | Type           | Description                                                                    |
+| ------------ | ----------- | -------------- | ------------------------------------------------------------------------------ |
+| providedData | 1..256      | `ProvidedData` | Names of data elements required by the participant to complete the transaction |
+
+The `ProvidedData` data model is defined as:
+
+| Data Element | Cardinality | Type              | Description                                                                   |
+| ------------ | ----------- | ----------------- | ----------------------------------------------------------------------------- |
+| dataKey      | 1           | `String(1..128)`  | Names of data element provided by the participant to complete the transaction |
+| dataValue    | 1           | `String(1..2056)` | Value of data element required by the participant to complete the transaction |
 
 #### Fees and Rates
 
@@ -493,57 +548,74 @@ sending the `POST /transfers` request.
 Participants can reject the quote if they are unable to provide the data
 requested or they can reject the transfer if the data provided is insufficient.
 
+### Connecting to non-Mojaloop systems
+
+To accommodate the variety of clearing timelines in non-Mojaloop systems a
+participant that initiates a transaction from a Mojaloop system that will be
+routed to a non-Mojaloop system can express a maximum value date in the quote
+request.
+
+This is the latest date and time when the payment must clear in the payee's
+account.
+
+In the response the CNP can provide a value date that they commit to, based on
+their knowledge of and SLAs with the external systems that will receive the
+payment.
+
 ## Data Model Changes
 
 `POST /quotes` request:
 
-| Name                 | Cardinality | Type            | Description                                                                                                 |
-| -------------------- | ----------- | --------------- | ----------------------------------------------------------------------------------------------------------- |
-| quoteId              | 1           | `CorrelationId` | Common ID between the FSPs for the quote object, decided by the Payer FSP.                                  |
-| transactionId        | 1           | `CorrelationId` | Common ID (decided by the Payer FSP) between the FSPs for the future transaction object.                    |
-| transactionRequestId | 0..1        | `CorrelationId` | Identifies an optional previously-sent transaction request. |
-| payee                | 1           | `Party`         | Information about the Payee in the proposed financial transaction. |
-| payer                | 1           | `Party`         | Information about the Payer in the proposed financial transaction. |
-| amountType           | 1           | `AmountType`    | `SEND` for send amount, `RECEIVE` for receive amount. |
-| amount               | 1           | `Money`         | If `SEND`: The amount the Payer would like to send. If `RECEIVE`: The amount the Payee should receive. |
-| fees                 | 0..1        | `Money`         | "Fees in the transaction. |
-| transactionType      | 1           | `TransactionType` | Type of transaction for which the quote is requested. |
-| geoCode              | 0..1        | `GeoCode` | Longitude and Latitude of the initiating Party. Can be used to detect fraud. |
-| note                 | 0..1        | `Note` | A memo that will be attached to the transaction. |
-| expiration           | 0..1        | `DateTime` | Expiration is optional. |
-| accountAddress       | 0..1        | `AccountAddress` | The address of the payee account, used for routing where the quote goes via one or more intermediaries. |
-| participants         | 0..16       | `Participant`     | The participants in the transaction.                                                                        |
-| extensionList        | 0..1        | `ExtensionList` | Optional extension, specific to deployment. |
- 
+| Name                 | Cardinality | Type              | Description                                                                                             |
+| -------------------- | ----------- | ----------------- | ------------------------------------------------------------------------------------------------------- |
+| quoteId              | 1           | `CorrelationId`   | Common ID between the FSPs for the quote object, decided by the Payer FSP.                              |
+| transactionId        | 1           | `CorrelationId`   | Common ID (decided by the Payer FSP) between the FSPs for the future transaction object.                |
+| transactionRequestId | 0..1        | `CorrelationId`   | Identifies an optional previously-sent transaction request.                                             |
+| payee                | 1           | `Party`           | Information about the Payee in the proposed financial transaction.                                      |
+| payer                | 1           | `Party`           | Information about the Payer in the proposed financial transaction.                                      |
+| amountType           | 1           | `AmountType`      | `SEND` for send amount, `RECEIVE` for receive amount.                                                   |
+| amount               | 1           | `Money`           | If `SEND`: The amount the Payer would like to send. If `RECEIVE`: The amount the Payee should receive.  |
+| fees                 | 0..1        | `Money`           | "Fees in the transaction.                                                                               |
+| transactionType      | 1           | `TransactionType` | Type of transaction for which the quote is requested.                                                   |
+| geoCode              | 0..1        | `GeoCode`         | Longitude and Latitude of the initiating Party. Can be used to detect fraud.                            |
+| note                 | 0..1        | `Note`            | A memo that will be attached to the transaction.                                                        |
+| expiration           | 0..1        | `DateTime`        | Expiration is optional.                                                                                 |
+| accountAddress       | 0..1        | `AccountAddress`  | The address of the payee account, used for routing where the quote goes via one or more intermediaries. |
+| participants         | 1           | `ParticipantList` | The participants in the transaction.                                                                    |
+| maxValueDate         | 0..1        | DateTime          | The maximum Value Date for this transaction to clear in the payee’s account                             |
+| extensionList        | 0..1        | `ExtensionList`   | Optional extension, specific to deployment.                                                             |
+
 `PUT /quotes` response callback:
 
-| Name               | Cardinality | Type              | Description                                                                                                 |
-| ------------------ | ----------- | ----------------- | ----------------------------------------------------------------------------------------------------------- |
-| transferAmount     | 1           | `Money`           | The amount of Money that the Payer FSP should transfer to the Payee FSP.                                    |
-| payeeReceiveAmount | 0..1        | `Money`           | The amount of Money that the Payee should receive in the end-to-end transaction.                            |
-| payeeFspFee        | 0..1        | `Money`           | Payee FSP’s part of the transaction fee.                                                                    |
-| payeeFspCommission | 0..1        | `Money`           | Transaction commission from the Payee FSP.                                                                  |
-| expiration         | 1           | `DateTime`        | Date and time until when the quotation is valid and can be honored when used in the subsequent transaction. |
-| geoCode            | 0..1        | `GeoCode`         | Longitude and Latitude of the Payee. Can be used to detect fraud.                                           |
-| echoData           | 0..1        | `String(1..2048)` | Opaque data provided by the payee that must be echoed back unchanged in the transfer.                       |
-| condition          | 1           | `IlpCondition`    | The condition that must be attached to the transfer by the Payer.                                           |
-| participants       | 0..16       | `Participant`     | The participants in the transaction.                                                                        |
-| extensionList      | 0..1        | `ExtensionList`   | Optional extension, specific to deployment.                                                                 |
+| Name               | Cardinality | Type            | Description                                                                                                 |
+| ------------------ | ----------- | --------------- | ----------------------------------------------------------------------------------------------------------- |
+| transferAmount     | 1           | `Money`         | The amount of Money that the Payer FSP should transfer to the Payee FSP.                                    |
+| payeeReceiveAmount | 0..1        | `Money`         | The amount of Money that the Payee should receive in the end-to-end transaction.                            |
+| payeeFspFee        | 0..1        | `Money`         | Payee FSP’s part of the transaction fee.                                                                    |
+| payeeFspCommission | 0..1        | `Money`         | Transaction commission from the Payee FSP.                                                                  |
+| expiration         | 1           | `DateTime`      | Date and time until when the quotation is valid and can be honored when used in the subsequent transaction. |
+| geoCode            | 0..1        | `GeoCode`       | Longitude and Latitude of the Payee. Can be used to detect fraud.                                           |
+| transaction        | 1           | `Transaction`   | The end-to-end transaction.                                                                                 |
+| echoData           | 0..1        | `EchoData`      | Opaque data provided by the payee that must be echoed back unchanged in the transfer.                       |
+| condition          | 1           | `IlpCondition`  | The condition that must be attached to the transfer by the Payer.                                           |
+| participants       | 0..16       | `Participant`   | The participants in the transaction.                                                                        |
+| valueDate          | 0..1        | DateTime        | The maximum Value Date for this transaction to clear in the payee’s account                                 |
+| extensionList      | 0..1        | `ExtensionList` | Optional extension, specific to deployment.                                                                 |
 
 `POST /transfers` request:
 
-| Name          | Cardinality | Type              | Description                                                                                               |
-| ------------- | ----------- | ----------------- | --------------------------------------------------------------------------------------------------------- |
-| transferId    | 1           | `CorrelationId`   | The common ID between the FSPs and the optional Switch for the transfer object, decided by the Payer FSP. |
-| payeeFsp      | 1           | `FspId`           | Payee FSP in the proposed financial transaction.                                                          |
-| payerFsp      | 1           | `FspId`           | Payer FSP in the proposed financial transaction.                                                          |
-| amount        | 1           | `Money`           | The transfer amount to be sent.                                                                           |
-| transaction   | 1           | `Transaction`     | The end-to-end transaction.                                                                               |
-| echoData      | 0..1        | `String(1..2048)` | Data provided by the Payee during quoting that is echoed back unchanged.                                  |
-| condition     | 1           | `IlpCondition`    | The condition that must be fulfilled to commit the transfer.                                              |
-| expiration    | 1           | `DateTime`        | The transfer should be rolled back if no fulfilment is delivered before this time.                        |
-| participants  | 0..16       | `Participant`     | The participants in the transaction.                                                                      |
-| extensionList | 0..1        | `ExtensionList`   | Optional extension, specific to deployment.                                                               |
+| Name          | Cardinality | Type            | Description                                                                                               |
+| ------------- | ----------- | --------------- | --------------------------------------------------------------------------------------------------------- |
+| transferId    | 1           | `CorrelationId` | The common ID between the FSPs and the optional Switch for the transfer object, decided by the Payer FSP. |
+| payeeFsp      | 1           | `FspId`         | Payee FSP in the proposed financial transaction.                                                          |
+| payerFsp      | 1           | `FspId`         | Payer FSP in the proposed financial transaction.                                                          |
+| amount        | 1           | `Money`         | The transfer amount to be sent.                                                                           |
+| transaction   | 1           | `Transaction`   | The end-to-end transaction.                                                                               |
+| echoData      | 0..1        | `EchoData`      | Data provided by the Payee during quoting that is echoed back unchanged.                                  |
+| condition     | 1           | `IlpCondition`  | The condition that must be fulfilled to commit the transfer.                                              |
+| expiration    | 1           | `DateTime`      | The transfer should be rolled back if no fulfilment is delivered before this time.                        |
+| participants  | 0..16       | `Participant`   | The participants in the transaction.                                                                      |
+| extensionList | 0..1        | `ExtensionList` | Optional extension, specific to deployment.                                                               |
 
 `PUT /transfers` response callback
 
@@ -554,6 +626,12 @@ requested or they can reject the transfer if the data provided is insufficient.
 | completedTimestamp | 0..1        | `DateTime`          | Time and date when the transfer was completed.              |
 | transferState      | 1           | `TransferState`     | State of the transfer.                                      |
 | extensionList      | 0..1        | `ExtensionList`     | Optional extension, specific to deployment.                 |
+
+`EchoData`:
+
+| Data Element | Cardinality | Type              | Description                                                                     |
+| ------------ | ----------- | ----------------- | ------------------------------------------------------------------------------- |
+| echoData     | 1           | `String(1..2048)` | Opaque data provided by the Payee during quoting that is echoed back unchanged. |
 
 `Account`:
 
@@ -570,13 +648,13 @@ requested or they can reject the transfer if the data provided is insufficient.
 
 `Party`:
 
-| Data Element | Cardinality | Type | Description                                                                                                                   |
-| ------------ | ----------- | ---- | ----------------------------------------------------------------------------------------------------------------------------- |
-| partyIdInfo                | 1    | `PartyIdInfo`                | Party Id type, id, sub ID or type, and FSP Id.                                                 |
-| merchantClassificationCode | 0..1 | `MerchantClassificationCode` | Used in the context of Payee Information, where the Payee happens to be a merchant.            |
-| name                       | 0..1 | `PartyName`                  | Display name of the Party, could be a real name or nickname.                                   |
-| personalInfo               | 0..1 | `PartyPersonalInfo`          | Personal information used to verify identity of Party such as name and date of birth.          |
-| accounts                   | 0..1 | `AccountList`                | A list of accounts that can accept transfers for the party.                                    |
+| Data Element               | Cardinality | Type                         | Description                                                                           |
+| -------------------------- | ----------- | ---------------------------- | ------------------------------------------------------------------------------------- |
+| partyIdInfo                | 1           | `PartyIdInfo`                | Party Id type, id, sub ID or type, and FSP Id.                                        |
+| merchantClassificationCode | 0..1        | `MerchantClassificationCode` | Used in the context of Payee Information, where the Payee happens to be a merchant.   |
+| name                       | 0..1        | `PartyName`                  | Display name of the Party, could be a real name or nickname.                          |
+| personalInfo               | 0..1        | `PartyPersonalInfo`          | Personal information used to verify identity of Party such as name and date of birth. |
+| accounts                   | 0..1        | `AccountList`                | A list of accounts that can accept transfers for the party.                           |
 
 `TransactionResult`:
 
